@@ -1,0 +1,10 @@
+#!/sbin/openrc-run
+# Copyright (c) 2022 TheRealOne78
+# Distributed under the terms of the GNU General Public License v3
+
+name="ntfy-resources-usage-plugin"
+description="Send NTFY alerts to your smart-phone when your unix computer is running out of resources."
+
+supervisor="supervise-daemon"
+command="/bin/bash /usr/bin/ntfy-resources-usage"
+command_background="true"

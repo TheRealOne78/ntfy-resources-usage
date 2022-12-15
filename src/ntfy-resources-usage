@@ -1,0 +1,214 @@
+#!/bin/bash
+
+#########################################################################
+#                                                                       #
+# ntfy-resources-usage plugin v1.0                                      #
+# Send notifications to your ntfy client when your computer runs out of #
+# resources. For more info, check out:                                  #
+# https://github.com/TheRealOne78/ntfy-resources-usage                  #
+# https://github.com/TheRealOne78/ntfy-resources-usage/wiki             #
+#                                                                       #
+# Copyright (c) 2022 TheRealOne78                                       #
+# Distributed under the terms of the GNU General Public License v3      #
+#                                                                       #
+#########################################################################
+
+### Variables ###
+
+# The name of this computer
+DEVICE_NAME=$(hostname)
+
+# The ntfy topic URI this plugin is going to send notifications
+NTFY_TOPIC="ntfy.sh/"
+
+# The ntfy priority level: [min, low, default, high, urgent]
+NTFY_PRIORITY="default"
+
+# Low memory(RAM) title
+RAM_TITLE="$DEVICE_NAME: Running out of memory"
+
+# Low storage title
+DISK_TITLE="$DEVICE_NAME: Running out of storage"
+
+# Low memory(RAM) message
+RAM_MSG="$DEVICE_NAME is running out of memory: "
+
+# Low storage message
+DISK_MSG="$DEVICE_NAME is running out of storage: "
+
+# Memory ratio to send alert
+MIN_RAM_RATIO="20"
+
+# Disk ratio to send alert
+MIN_DISK_RATIO="20"
+
+# Delay time between resources checks in seconds
+# Here are 2 variable examples, one with minutes where you don't need to
+# calculate how many seconds in 'n' minutes and another one that uses seconds.
+# Make sure to comment/uncomment
+#
+DELAY_TIME="$((5 * 60))" # for minutes
+##  minutes----^   ^---1 minute in seconds #
+#DELAY_TIME="300"        # use only seconds
+
+
+# Debug info. Uncomment to send debug info.
+DEBUG="true"
+
+### End Of Variables ###
+
+ ##############################################
+#  _____  ___  ___________  _______  ___  ___  #
+# (\"   \|"  \("     _   ")/"     "||"  \/"  | #
+# |.\\   \    |)__/  \\__/(: ______) \   \  /  #
+# |: \.   \\  |   \\_ /    \/    |    \\  \/   #
+# |.  \    \. |   |.  |    // ___)    /   /    #
+# |    \    \ |   \:  |   (:  (      /   /     #
+#  \___|\____\)    \__|    \__/     |___/ v1.0 #
+ ##############################################
+
+### Code ###
+
+# Terminal colors
+RED="\e[31m"
+YELLOW="\e[33m"
+BLUE="\e[34m"
+ENDCOLOR="\e[0m"
+
+INFO="["$BLUE"i"$ENDCOLOR"]"
+WARN="["$YELLOW"w"$ENDCOLOR"]"
+ERR="["$RED"e"$ENDCOLOR"]"
+
+## Code from neofetch - https://github.com/dylanaraps/neofetch ##
+# Original license: MIT - https://mit-license.org/ #
+get_mem() {
+  while IFS=":" read -r a b; do
+    case $a in
+      "MemTotal") ((mem_used+=${b/kB})); mem_total="${b/kB}" ;;
+      "Shmem") ((mem_used+=${b/kB}))  ;;
+      "MemFree" | "Buffers" | "Cached" | "SReclaimable")
+          mem_used="$((mem_used-=${b/kB}))"
+      ;;
+    esac
+  done < /proc/meminfo
+}
+
+get_disk() {
+  type -p df &>/dev/null ||
+    { err "Disk requires 'df' to function. Install 'df' to get disk info."; return; }
+
+  df_version=$(df --version 2>&1)
+
+  case $df_version in
+    *IMitv*)   df_flags=(-P -g) ;; # AIX
+    *befhikm*) df_flags=(-P -k) ;; # IRIX
+    *hiklnP*)  df_flags=(-h)    ;; # OpenBSD
+
+    *Tracker*) # Haiku
+      err "Your version of df cannot be used due to the non-standard flags"
+      return
+    ;;
+
+    *) df_flags=(-P -h) ;;
+  esac
+
+  # Create an array called 'disks' where each element is a separate line from
+  # df's output. We then unset the first element which removes the column titles.
+  IFS=$'\n' read -d "" -ra disks <<< "$(df "${df_flags[@]}" "${disk_show[@]:-/}")"
+  unset "disks[0]"
+
+  # Stop here if 'df' fails to print disk info.
+  [[ ${disks[*]} ]] || {
+    err "Disk: df failed to print the disks, make sure the disk_show array is set properly."
+    return
+  }
+
+  for disk in "${disks[@]}"; do
+    # Create a second array and make each element split at whitespace this time.
+    IFS=" " read -ra disk_info <<< "$disk"
+    disk_perc=${disk_info[-2]/\%}
+
+    case $df_version in
+      *befhikm*)
+        disk="$((disk_info[-4]/1024/1024))GiB out of $((disk_info[-5]/1024/1024))GiB"
+      ;;
+
+      *)
+        disk="${disk_info[-4]/i}iB out of ${disk_info[-5]/i}iB"
+      ;;
+    esac
+  done
+}
+## End of code from neofetch ##
+
+unset_var() {
+  # get_mem
+  unset a
+  unset mem_used
+  unset mem_total
+
+  # get_disk
+  unset disk
+  unset disk_perc
+  unset IFS
+  unset disks
+  unset df_flags
+  unset disk_info
+
+  # calculate mem
+  unset USED_MEM
+  unset TOTAL_MEM
+  unset FREE_MEM
+  unset RATIO_MEM
+
+  # calculate disk
+  unset USED_DISK
+  unset TOTAL_DISK
+  unset FREE_DISK
+  unset RATIO_DISK
+}
+
+# Get resource info from computer, send it and repeat
+while (true); do
+  get_mem
+  USED_MEM="$((mem_used / 1024))"
+  TOTAL_MEM="$((mem_total / 1024))"
+  FREE_MEM="$((TOTAL_MEM - USED_MEM))"
+  RATIO_MEM="$(($(($FREE_MEM * 100)) / $TOTAL_MEM ))"
+
+  get_disk
+  USED_DISK="$(echo ${disk_info[-4]} | sed 's/[A-Za-z]//g')"
+  TOTAL_DISK="$(echo ${disk_info[-5]} | sed 's/[A-Za-z]//g')"
+  FREE_DISK="$(($TOTAL_DISK - $USED_DISK))"
+  RATIO_DISK="$(($(($FREE_DISK * 100)) / $TOTAL_DISK ))"
+
+  # Check and send memory warnings
+  if [ $RATIO_MEM -lt $MIN_RAM_RATIO ]; then
+    curl --silent \
+      -H "title: $RAM_TITLE" \
+      -H "priority: $NTFY_PRIORITY" \
+      -H "tags: computer" \
+      -d "$RAM_MSG$FREE_MEM MiB out of $TOTAL_MEM MiB" \
+      $NTFY_TOPIC
+    if [ $DEBUG == "true" ]; then
+      printf "$DEBUG Sent notification to $NTFY_TOPIC, priority - $NTFY_PRIORITY, message $RAM_MSG$FREE_MEM MiB out of $TOTAL_MEM MiB"
+    fi
+  fi
+
+  # Check and send storage warnings
+  if [ $RATIO_DISK -lt $MIN_DISK_RATIO ]; then
+    curl --silent \
+      -H "title: $DISK_TITLE" \
+      -H "priority: $NTFY_PRIORITY" \
+      -H "tags: floppy_disk" \
+      -d "$DISK_MSG$FREE_DISK GiB out of $TOTAL_DISK GiB" \
+      $NTFY_TOPIC
+    if [ $DEBUG == "true" ]; then
+      printf "$DEBUG Sent notification to $NTFY_TOPIC, priority - $NTFY_PRIORITY, message $DISK_MSG$FREE_DISK out of $TOTAL_DISK"
+    fi
+  fi
+
+  unset_var
+  sleep $DELAY_TIME # Check again in $DELAY_TIME seconds
+
+done

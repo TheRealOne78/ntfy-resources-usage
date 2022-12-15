@@ -1,0 +1,18 @@
+# Copyright (c) 2022 TheRealOne78
+# Distributed under the terms of the GNU General Public License v3
+
+[Unit]
+Name="ntfy-resources-usage"
+Description="Send NTFY alerts to your smart-phone when your unix computer is running out of resources."
+After="network.target"
+
+[Service]
+Type="simple"
+ExecStart="/usr/bin/ntfy-resources-usage"
+ExecReload="/usr/bin/ntfy-resources-usage"
+TimeoutStartSec="0"
+RemainAfterExit="yes"
+Restart="always"
+
+[Install]
+WantedBy="default.target"
