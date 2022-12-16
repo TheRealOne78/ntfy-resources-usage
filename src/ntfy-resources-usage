@@ -51,9 +51,8 @@ DELAY_TIME="$((5 * 60))" # for minutes
 ##  minutes----^   ^---1 minute in seconds #
 #DELAY_TIME="300"        # use only seconds
 
-
 # Debug info. Uncomment to send debug info.
-DEBUG="true"
+#DEBUG="true"
 
 ### End Of Variables ###
 
