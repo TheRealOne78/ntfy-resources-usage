@@ -51,7 +51,7 @@ install_init() {
   case $INIT_CHOICE in
     1)
       make install_systemd
-      systemctl enable ntfy-resources-usage.system
+      systemctl enable ntfy-resources-usage.service
       ;;
     2)
       make install_openrc
