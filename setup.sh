@@ -23,12 +23,13 @@ if [[ ! $EXIT_CODE -eq 0 ]]; then
 fi
 
 # Install
+printf "$INFO Installing ntfy-resources-usage and configuration file\n"
 ## BSD family
 if [ -x "$(command -v pkg)" ] || [ -x "$(command -v pkg_add)" ] || [ -x "$(command -v pkgin)" ]; then
-  gmake install
+  gmake install install_config
 ## Linux
 else
-  make install
+  make install install_config
 fi
 EXIT_CODE=$?
 if [[ ! $EXIT_CODE -eq 0 ]]; then
@@ -93,5 +94,5 @@ else  # if Systemd or OpenRC couldn't be found in the system
   printf "$ERR More info at https://github.com/TheRealOne78/ntfy-resources-usage/wiki\n"
 fi
 
-printf "$INFO You can now edit the variables in '/usr/bin/ntfy-resources-usage'\n"
+printf "$INFO You can now edit the variables in '/etc/ntfy-resources-usage/ntfy-resources-usage.conf'\n"
 printf "$INFO More info at https://github.com/TheRealOne78/ntfy-resources-usage/wiki\n"

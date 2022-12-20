@@ -2,7 +2,7 @@
 
 #########################################################################
 #                                                                       #
-# ntfy-resources-usage plugin v1.0                                      #
+# ntfy-resources-usage plugin v1.0.1                                    #
 # Send notifications to your ntfy client when your computer runs out of #
 # resources. For more info, check out:                                  #
 # https://github.com/TheRealOne78/ntfy-resources-usage                  #
@@ -19,7 +19,7 @@
 DEVICE_NAME=$(hostname)
 
 # The ntfy topic URI this plugin is going to send notifications
-NTFY_TOPIC="ntfy.sh/"
+#NTFY_TOPIC="ntfy.sh/"
 
 # The ntfy priority level: [min, low, default, high, urgent]
 NTFY_PRIORITY="default"
@@ -67,6 +67,19 @@ DELAY_TIME="$((5 * 60))" # for minutes
  ##############################################
 
 ### Code ###
+
+# import user defined variables
+if [ -f "/etc/ntfy-resources-usage/ntfy-resources-usage.conf" ]; then
+  source "/etc/ntfy-resources-usage/ntfy-resources-usage.conf"
+else
+  printf "$INFO No configuration file found, using default parameters.\n"
+fi
+
+if [ $NTFY_TOPIC == "" ]; then
+  printf "$ERR No NTFY topic was set. nfty-resources-usage can't run without a topic.\n"
+  printf "$ERR Exiting ...\n"
+  exit 1
+fi
 
 # Terminal colors
 RED="\e[31m"

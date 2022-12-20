@@ -140,5 +140,5 @@ $ERR For more info, see https://wiki.gentoo.org/wiki/Emerge and https://wiki.gen
   fi
 
 else
-  printf "$INFO Nothing to install, skipping configure.sh\n"
+  printf "$INFO No dependencies to install, skipping configure.sh\n"
 fi
