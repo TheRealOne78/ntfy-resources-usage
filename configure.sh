@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) 2024 TheRealOne78
+# Distributed under the terms of the GNU General Public License v3+
+# https://www.gnu.org/licenses/gpl-3.0.en.html
 
 RED="\e[31m"
 YELLOW="\e[33m"

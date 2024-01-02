@@ -1,5 +1,6 @@
-# Copyright (c) 2022 TheRealOne78
-# Distributed under the terms of the GNU General Public License v3
+# Copyright (c) 2024 TheRealOne78
+# Distributed under the terms of the GNU General Public License v3+
+# https://www.gnu.org/licenses/gpl-3.0.en.html
 
 [Unit]
 Name="ntfy-resources-usage"

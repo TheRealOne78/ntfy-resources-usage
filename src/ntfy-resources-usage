@@ -2,14 +2,15 @@
 
 #########################################################################
 #                                                                       #
-# ntfy-resources-usage plugin v1.0.1                                    #
+# ntfy-resources-usage plugin v1.0.2                                    #
 # Send notifications to your ntfy client when your computer runs out of #
 # resources. For more info, check out:                                  #
 # https://github.com/TheRealOne78/ntfy-resources-usage                  #
 # https://github.com/TheRealOne78/ntfy-resources-usage/wiki             #
 #                                                                       #
-# Copyright (c) 2022 TheRealOne78                                       #
-# Distributed under the terms of the GNU General Public License v3      #
+# Copyright (c) 2024 TheRealOne78                                       #
+# Distributed under the terms of the GNU General Public License v3+     #
+# https://www.gnu.org/licenses/gpl-3.0.en.html
 #                                                                       #
 #########################################################################
 
@@ -21,8 +22,36 @@ DEVICE_NAME=$(hostname)
 # The ntfy topic URI this plugin is going to send notifications
 #NTFY_TOPIC="ntfy.sh/"
 
+# The ntfy user - leave empty if using an anonymous server like ntfy.sh
+#
+# WARNING: You're better off configuring the login credentials in a
+# configuration file where only the root user has read access (600):
+# `/etc/ntfy-resources-usage/ntfy-resources-usage.conf'
+#
+# You've been warned!
+#NTFY_USER=""
+
+# The ntfy password - leave empty if using an anonymous server like ntfy.sh
+#
+# WARNING: You're better off configuring the login credentials in a
+# configuration file where only the root user has read access (600):
+# `/etc/ntfy-resources-usage/ntfy-resources-usage.conf'
+#
+# You've been warned!
+#NTFY_PASSWORD=""
+
+
 # The ntfy priority level: [min, low, default, high, urgent]
 NTFY_PRIORITY="default"
+
+# Check for RAM?
+CHECK_RAM=true
+
+# Check for disk usage?
+CHECK_DISK=true
+
+# Check for battery?
+CHECK_BATTERY=false
 
 # Low memory(RAM) title
 RAM_TITLE="$DEVICE_NAME: Running out of memory"
@@ -33,14 +62,23 @@ DISK_TITLE="$DEVICE_NAME: Running out of storage"
 # Low memory(RAM) message
 RAM_MSG="$DEVICE_NAME is running out of memory: "
 
+# Low battery title
+BATTERY_TITLE="$DEVICE_NAME: Running out of battery"
+
 # Low storage message
 DISK_MSG="$DEVICE_NAME is running out of storage: "
+
+# Low battery message
+BATTERY_RATIO="$DEVICE_NAME: Running out of battery: "
 
 # Memory ratio to send alert
 MIN_RAM_RATIO="20"
 
 # Disk ratio to send alert
 MIN_DISK_RATIO="20"
+
+# Battery ratio to send alert
+MIN_BATTERY_RATIO="20"
 
 # Delay time between resources checks in seconds
 # Here are 2 variable examples, one with minutes where you don't need to
@@ -56,28 +94,32 @@ DELAY_TIME="$((5 * 60))" # for minutes
 
 ### End Of Variables ###
 
- ##############################################
+##############################################
 #  _____  ___  ___________  _______  ___  ___  #
 # (\"   \|"  \("     _   ")/"     "||"  \/"  | #
 # |.\\   \    |)__/  \\__/(: ______) \   \  /  #
 # |: \.   \\  |   \\_ /    \/    |    \\  \/   #
 # |.  \    \. |   |.  |    // ___)    /   /    #
 # |    \    \ |   \:  |   (:  (      /   /     #
-#  \___|\____\)    \__|    \__/     |___/ v1.0 #
- ##############################################
+#  \___|\____\)    \__|    \__/     |__v1.0.2  #
+##############################################
 
 ### Code ###
 
-# import user defined variables
+# Handle INT and TERM signals by exiting with 0
+trap "exit 0" SIGINT
+trap "exit 0" SIGTERM
+
+# Import user defined variables
 if [ -f "/etc/ntfy-resources-usage/ntfy-resources-usage.conf" ]; then
   source "/etc/ntfy-resources-usage/ntfy-resources-usage.conf"
 else
   printf "$INFO No configuration file found, using default parameters.\n"
 fi
 
-if [ $NTFY_TOPIC == "" ]; then
+if [ -z "${NTFY_TOPIC}" ]; then
   printf "$ERR No NTFY topic was set. nfty-resources-usage can't run without a topic.\n"
-  printf "$ERR Exiting ...\n"
+  printf "$ERR Exiting...\n"
   exit 1
 fi
 
@@ -91,37 +133,111 @@ INFO="["$BLUE"i"$ENDCOLOR"]"
 WARN="["$YELLOW"w"$ENDCOLOR"]"
 ERR="["$RED"e"$ENDCOLOR"]"
 
-## Code from neofetch - https://github.com/dylanaraps/neofetch ##
-# Original license: MIT - https://mit-license.org/ #
+
+############################################################
+# The following code is forked from the neofetch project.  #
+#                                                          #
+# Upstream URL: https://github.com/dylanaraps/neofetch     #
+# Original neofetch license: MIT - https://mit-license.org #
+#                                                          #
+# ntfy-resources-usage is not sponsored by or affiliated   #
+# to neofetch or dylanaraps.                               #
+############################################################
+get_os() {
+  # Cache the output of uname so we don't
+  # have to spawn it multiple times.
+  IFS=" " read -ra uname <<< "$(uname -srm)"
+
+  kernel_name="${uname[0]}"
+  kernel_version="${uname[1]}"
+  kernel_machine="${uname[2]}"
+
+  if [ "$kernel_name" == "Darwin" ]; then
+    # macOS can report incorrect versions unless this is 0.
+    # https://github.com/dylanaraps/neofetch/issues/1607
+    export SYSTEM_VERSION_COMPAT=0
+
+    IFS=$'\n' read -d "" -ra sw_vers <<< "$(awk -F'<|>' '/key|string/ {print $3}' \
+      "/System/Library/CoreServices/SystemVersion.plist")"
+    for ((i=0;i<${#sw_vers[@]};i+=2)) {
+      case ${sw_vers[i]} in
+        ProductName)          darwin_name=${sw_vers[i+1]} ;;
+        ProductVersion)       osx_version=${sw_vers[i+1]} ;;
+        ProductBuildVersion)  osx_build=${sw_vers[i+1]}   ;;
+      esac
+    }
+    fi
+
+  case $kernel_name in
+    Darwin)   os=$darwin_name ;;
+    SunOS)    os=Solaris ;;
+    Haiku)    os=Haiku ;;
+    MINIX)    os=MINIX ;;
+    AIX)      os=AIX ;;
+    IRIX*)    os=IRIX ;;
+    FreeMiNT) os=FreeMiNT ;;
+
+    Linux|GNU*)
+      os=Linux
+      ;;
+
+    *BSD|DragonFly|Bitrig)
+      os=BSD
+      ;;
+
+    CYGWIN*|MSYS*|MINGW*)
+      os=Windows
+      ;;
+
+    *)
+      printf "$ERR Unknown OS detected: \`$kernel_name', aborting...\n"
+      exit 1
+      ;;
+  esac
+}
+
 get_mem() {
   while IFS=":" read -r a b; do
-    case $a in
-      "MemTotal") ((mem_used+=${b/kB})); mem_total="${b/kB}" ;;
-      "Shmem") ((mem_used+=${b/kB}))  ;;
-      "MemFree" | "Buffers" | "Cached" | "SReclaimable")
-          mem_used="$((mem_used-=${b/kB}))"
+  case $a in
+    "MemTotal") ((mem_used+=${b/kB})); mem_total="${b/kB}" ;;
+    "Shmem") ((mem_used+=${b/kB}))  ;;
+    "MemFree" | "Buffers" | "Cached" | "SReclaimable")
+      mem_used="$((mem_used-=${b/kB}))"
       ;;
-    esac
+  esac
   done < /proc/meminfo
 }
 
 get_disk() {
-  type -p df &>/dev/null ||
-    { err "Disk requires 'df' to function. Install 'df' to get disk info."; return; }
+  type -p df &>/dev/null || {
+    printf "$ERR Disk requires \`df' to function! Install \`df' to get disk info.\n";
+    printf "$ERR Exiting...\n"
+    exit 1
+  }
 
   df_version=$(df --version 2>&1)
 
   case $df_version in
-    *IMitv*)   df_flags=(-P -g) ;; # AIX
-    *befhikm*) df_flags=(-P -k) ;; # IRIX
-    *hiklnP*)  df_flags=(-h)    ;; # OpenBSD
+    *IMitv*) # AIX
+      df_flags=(-P -g)
+      ;;
+
+    *befhikm*) # IRIX
+      df_flags=(-P -k)
+      ;;
+
+    *hiklnP*) # OpenBSD
+      df_flags=(-h)
+      ;;
 
     *Tracker*) # Haiku
-      err "Your version of df cannot be used due to the non-standard flags"
-      return
-    ;;
+      printf "$ERR Your version of \`df' cannot be used due to the non-standard flags!\n"
+      printf "$ERR Exiting...\n"
+      ;;
 
-    *) df_flags=(-P -h) ;;
+    *)
+      df_flags=(-P -h)
+      ;;
   esac
 
   # Create an array called 'disks' where each element is a separate line from
@@ -131,27 +247,101 @@ get_disk() {
 
   # Stop here if 'df' fails to print disk info.
   [[ ${disks[*]} ]] || {
-    err "Disk: df failed to print the disks, make sure the disk_show array is set properly."
-    return
+    printf "$ERR Disk: df failed to print the disks, make sure the disk_show array is set properly.\n"
+    printf "$ERR Exiting...\n"
   }
 
   for disk in "${disks[@]}"; do
-    # Create a second array and make each element split at whitespace this time.
-    IFS=" " read -ra disk_info <<< "$disk"
-    disk_perc=${disk_info[-2]/\%}
+  # Create a second array and make each element split at whitespace this time.
+  IFS=" " read -ra disk_info <<< "$disk"
+  disk_perc=${disk_info[-2]/\%}
 
-    case $df_version in
-      *befhikm*)
-        disk="$((disk_info[-4]/1024/1024))GiB out of $((disk_info[-5]/1024/1024))GiB"
+  case $df_version in
+    *befhikm*)
+      disk="$((disk_info[-4]/1024/1024))GiB out of $((disk_info[-5]/1024/1024))GiB"
       ;;
 
-      *)
-        disk="${disk_info[-4]/i}iB out of ${disk_info[-5]/i}iB"
+    *)
+      disk="${disk_info[-4]/i}iB out of ${disk_info[-5]/i}iB"
       ;;
-    esac
+  esac
   done
 }
-## End of code from neofetch ##
+
+get_battery() {
+  case $os in
+    "Linux")
+      for bat in "/sys/class/power_supply/"{BAT,axp288_fuel_gauge,CMB}*; do
+        if [ ! -d ${bat} ]; then
+          continue
+        fi
+
+        capacity="$(< "${bat}/capacity")"
+
+        if [[ "$capacity" ]]; then
+          battery="${capacity}"
+        fi
+      done
+      return
+      ;;
+
+    "BSD")
+      case $kernel_name in
+        "FreeBSD"* | "DragonFly"*)
+          battery="$(acpiconf -i 0 | awk -F ':\t' '/Remaining capacity/ {print $2}')"
+          ;;
+
+        "NetBSD"*)
+          battery="$(envstat | awk '\\(|\\)' '/charge:/ {print $2}')"
+          battery="${battery/\.*/%}"
+          ;;
+
+        "OpenBSD"* | "Bitrig"*)
+          battery0full="$(sysctl -n   hw.sensors.acpibat0.watthour0\
+            hw.sensors.acpibat0.amphour0)"
+          battery0full="${battery0full%% *}"
+
+          battery0now="$(sysctl -n    hw.sensors.acpibat0.watthour3\
+            hw.sensors.acpibat0.amphour3)"
+          battery0now="${battery0now%% *}"
+
+          state="$(sysctl -n hw.sensors.acpibat0.raw0)"
+          state="${state##? (battery }"
+          state="${state%)*}"
+
+          [[ "${state}" == "charging" ]] && battery_state="charging"
+          [[ "$battery0full" ]] && \
+            battery="$((100 * ${battery0now/\.} / ${battery0full/\.}))"
+          ;;
+      esac
+      ;;
+
+    "Mac OS X"|"macOS")
+      battery="$(pmset -g batt | grep -o '[0-9]*%')"
+      state="$(pmset -g batt | awk '/;/ {print $4}')"
+      [[ "$state" == "charging;" ]] && battery_state="charging"
+      ;;
+
+    "Windows")
+      battery="$(wmic Path Win32_Battery get EstimatedChargeRemaining)"
+      battery="${battery/EstimatedChargeRemaining}"
+      battery="$(trim "$battery")%"
+      state="$(wmic /NameSpace:'\\root\WMI' Path BatteryStatus get Charging)"
+      state="${state/Charging}"
+      [[ "$state" == *TRUE* ]] && battery_state="charging"
+      ;;
+
+    "Haiku")
+      battery0full="$(awk -F '[^0-9]*' 'NR==2 {print $4}' /dev/power/acpi_battery/0)"
+      battery0now="$(awk -F '[^0-9]*' 'NR==5 {print $4}' /dev/power/acpi_battery/0)"
+      battery="$((battery0full * 100 / battery0now))%"
+      ;;
+  esac
+}
+################################################
+# End of code forked from the neofetch project #
+################################################
+
 
 unset_var() {
   # get_mem
@@ -178,49 +368,166 @@ unset_var() {
   unset TOTAL_DISK
   unset FREE_DISK
   unset RATIO_DISK
+
+  # calculate battery
+  unset RATIO_BATTERY
+
+  # cURL args
+  unset curl_args
 }
 
-# Get resource info from computer, send it and repeat
-while (true); do
+check_http_status() {
+  case ${1} in
+    200)
+      return 0
+      ;;
+
+    403)
+      printf "$ERR Couldn't authenticate to \`${NTFY_TOPIC}', are credentials valid?\n"
+      printf "$ERR Exiting...\n"
+      exit 1
+      ;;
+
+    404)
+      printf "$ERR \`${NTFY_TOPIC}' could not be found, is NTFY_TOPIC correct?\n"
+      printf "$ERR Exiting...\n"
+      exit 1
+      ;;
+
+    *)
+      printf "$WARN Uncatched HTTP response status code, continuing anyway...\n"
+      ;;
+  esac
+}
+
+check_memory() {
   get_mem
   USED_MEM="$((mem_used / 1024))"
   TOTAL_MEM="$((mem_total / 1024))"
   FREE_MEM="$((TOTAL_MEM - USED_MEM))"
   RATIO_MEM="$(($(($FREE_MEM * 100)) / $TOTAL_MEM ))"
 
+  # Check and send memory warnings
+  if [ ${RATIO_MEM} -lt ${MIN_RAM_RATIO} ]; then
+
+    # Build up the curl arguments
+    curl_args=(--silent -o /dev/null -w "%{http_code}")
+
+    # If $NTFY_USER and $NTFY_PASSWORD do not exist, do NOT use them
+    if [ ! -z "$NTFY_USER" ] && [ ! -z "$NTFY_PASSWORD" ]; then
+      curl_args+=(-u "${NTFY_USER}:${NTFY_PASSWORD}")
+    fi
+
+    # Add the rest of the arguments that will make up the final ntfy message
+    curl_args+=(
+      -H "title: ${RAM_TITLE}"
+      -H "priority: ${NTFY_PRIORITY}"
+      -H "tags: computer"
+      -d "${RAM_MSG}${FREE_MEM} MiB out of ${TOTAL_MEM} MiB"
+      "${NTFY_TOPIC}"
+      )
+
+    http_code=$(curl "${curl_args[@]}")
+    check_http_status ${http_code}
+
+    if [ $DEBUG == "true" ]; then
+      printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${RAM_MSG}${FREE_MEM} MiB out of ${TOTAL_MEM} MiB\n"
+    fi
+  fi
+}
+
+check_disk() {
   get_disk
   USED_DISK="$(echo ${disk_info[-4]} | sed 's/[A-Za-z]//g')"
   TOTAL_DISK="$(echo ${disk_info[-5]} | sed 's/[A-Za-z]//g')"
   FREE_DISK="$(($TOTAL_DISK - $USED_DISK))"
   RATIO_DISK="$(($(($FREE_DISK * 100)) / $TOTAL_DISK ))"
 
-  # Check and send memory warnings
-  if [ $RATIO_MEM -lt $MIN_RAM_RATIO ]; then
-    curl --silent \
-      -H "title: $RAM_TITLE" \
-      -H "priority: $NTFY_PRIORITY" \
-      -H "tags: computer" \
-      -d "$RAM_MSG$FREE_MEM MiB out of $TOTAL_MEM MiB" \
-      $NTFY_TOPIC
-    if [ $DEBUG == "true" ]; then
-      printf "$DEBUG Sent notification to $NTFY_TOPIC, priority - $NTFY_PRIORITY, message $RAM_MSG$FREE_MEM MiB out of $TOTAL_MEM MiB"
-    fi
-  fi
-
   # Check and send storage warnings
   if [ $RATIO_DISK -lt $MIN_DISK_RATIO ]; then
-    curl --silent \
-      -H "title: $DISK_TITLE" \
-      -H "priority: $NTFY_PRIORITY" \
-      -H "tags: floppy_disk" \
-      -d "$DISK_MSG$FREE_DISK GiB out of $TOTAL_DISK GiB" \
-      $NTFY_TOPIC
+
+    # Build up the curl arguments
+    curl_args=(--silent -o /dev/null -w "%{http_code}")
+
+    # If $NTFY_USER and $NTFY_PASSWORD do not exist, do NOT use them
+    if [ ! -z "${NTFY_USER}" ] && [ ! -z "${NTFY_PASSWORD}" ]; then
+      curl_args+=(-u "${NTFY_USER}:${NTFY_PASSWORD}")
+    fi
+
+    # Add the rest of the arguments that will make up the final ntfy message
+    curl_args+=(
+      -H "title: ${RAM_TITLE}"
+      -H "priority: ${NTFY_PRIORITY}"
+      -H "tags: floppy_disk"
+      -d "${DISK_MSG}${FREE_DISK} GiB out of ${TOTAL_DISK} GiB"
+      "${NTFY_TOPIC}"
+    )
+
+    http_code=$(curl "${curl_args[@]}")
+    check_http_status ${http_code}
     if [ $DEBUG == "true" ]; then
-      printf "$DEBUG Sent notification to $NTFY_TOPIC, priority - $NTFY_PRIORITY, message $DISK_MSG$FREE_DISK out of $TOTAL_DISK"
+      printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${DISK_MSG}${FREE_DISK} out of ${TOTAL_DISK}\n"
     fi
   fi
+}
 
-  unset_var
-  sleep $DELAY_TIME # Check again in $DELAY_TIME seconds
+check_battery() {
+  get_battery
+  RATIO_BATTERY=$(echo ${battery} | tr -d '%')
 
-done
+  if [ $RATIO_BATTERY -lt $MIN_BATTERY_RATIO ]; then
+
+    # Build up the curl arguments
+    curl_args=(--silent -o /dev/null -w "%{http_code}")
+
+    # If $NTFY_USER and $NTFY_PASSWORD do not exist, do NOT use them
+    if [ ! -z "${NTFY_USER}" ] && [ ! -z "${NTFY_PASSWORD}" ]; then
+      curl_args+=(-u "${NTFY_USER}:${NTFY_PASSWORD}")
+    fi
+
+    # Add the rest of the arguments that will make up the final ntfy message
+    curl_args+=(
+      -H "title: ${RAM_TITLE}"
+      -H "priority: ${NTFY_PRIORITY}"
+      -H "tags: battery"
+      -d "${BATTERY_MSG}${RATIO_BATTERY}%"
+      "${NTFY_TOPIC}"
+    )
+
+    http_code=$(curl "${curl_args[@]}")
+    check_http_status ${http_code}
+    if [ $DEBUG == "true" ]; then
+      printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${DISK_MSG}${FREE_DISK} out of ${TOTAL_DISK}\n"
+    fi
+  fi
+}
+
+main() {
+  # Prepare OS info
+  get_os
+
+  # Get resource info from computer, check it, send it and repeat
+  while (true); do
+
+    if [ $CHECK_RAM ]; then
+      check_memory
+    fi
+
+    if [ $CHECK_DISK ]; then
+      check_disk
+    fi
+
+    $CHECK_BATTERY=true #TODO: TEST
+
+    if [ $CHECK_BATTERY ]; then
+      check_battery
+    fi
+
+    unset_var
+
+    sleep $DELAY_TIME # Check again in $DELAY_TIME seconds
+
+  done
+}
+
+main

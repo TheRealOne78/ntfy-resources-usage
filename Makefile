@@ -1,5 +1,6 @@
-# Copyright (c) 2022 TheRealOne78
-# Distributed under the terms of the GNU General Public License v3
+# Copyright (c) 2024 TheRealOne78
+# Distributed under the terms of the GNU General Public License v3+
+# https://www.gnu.org/licenses/gpl-3.0.en.html
 
 SRC = ./src/
 BIN = $(SRC)./ntfy-resources-usage
@@ -22,11 +23,11 @@ OPENRC_BIN = $(INIT_DIR_SRC)./openrc
 OPENRC_FINAL_BIN = ntfy-resources-usage
 
 install:
-	install -t $(INSTALL_DIR) --owner=$(shell stat -c "%U" $(INSTALL_DIR)) --group=$(shell stat -c "%G" $(INSTALL_DIR)) -m 775 $(BIN) # install $(BIN) in $(INSTALL_DIR)
+	install -t $(INSTALL_DIR) --owner=$(shell stat -c "%U" $(INSTALL_DIR)) --group=$(shell stat -c "%G" $(INSTALL_DIR)) -m 700 $(BIN) # install $(BIN) in $(INSTALL_DIR)
 
 install_config:
 	install -d --owner=$(shell stat -c "%U" $(CONF_DIR)) --group=$(shell stat -c "%G" $(CONF_DIR)/) -m 755 "$(CONF_DIR_FINAL)"
-	install -t "$(CONF_DIR_FINAL)" --owner=$(shell stat -c "%U" $(CONF_DIR_FINAL)) --group=$(shell stat -c "%G" $(CONF_DIR_FINAL)) -m 755 "$(CONF_FILE)"
+	install -t "$(CONF_DIR_FINAL)" --owner=$(shell stat -c "%U" $(CONF_DIR_FINAL)) --group=$(shell stat -c "%G" $(CONF_DIR_FINAL)) -m 600 "$(CONF_FILE)"
 
 install_systemd:
 	cp $(SYSTEMD_BIN) $(INIT_DIR_SRC)$(SYSTEMD_FINAL_BIN)
