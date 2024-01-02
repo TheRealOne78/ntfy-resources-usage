@@ -7,7 +7,6 @@ Send [NTFY](https://ntfy.sh/) alerts to your smart-phone when your unix computer
 <!-- Download on the App Store - https://upload.wikimedia.org/wikipedia/commons/archive/3/3c/20170219160110!Download_on_the_App_Store_Badge.svg -->
 
 ## TODO:
-* [ ] Add battery warnings
 * [ ] Add more init service scripts
 
 ## Wiki
