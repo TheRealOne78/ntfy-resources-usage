@@ -16,69 +16,27 @@
 
 ### Variables ###
 
+## << G E N E R A L >>
 # The name of this computer
 DEVICE_NAME=$(hostname)
 
 # The ntfy topic URI this plugin is going to send notifications
 #NTFY_TOPIC="ntfy.sh/"
 
-# The ntfy user - leave empty if using an anonymous server like ntfy.sh
+# File containing authentication credentials for ntfy instances where it
+# requires a user and password
 #
-# WARNING: You're better off configuring the login credentials in a
-# configuration file where only the root user has read access (600):
-# `/etc/ntfy-resources-usage/ntfy-resources-usage.conf'
+# The file should be user:password. The user must not contain a colon character
+# (':') because anything after the first colon will be treated as the password.
 #
-# You've been warned!
-#NTFY_USER=""
-
-# The ntfy password - leave empty if using an anonymous server like ntfy.sh
+# Leave this variable commented out if you don't need/want to authenticate.
 #
-# WARNING: You're better off configuring the login credentials in a
-# configuration file where only the root user has read access (600):
-# `/etc/ntfy-resources-usage/ntfy-resources-usage.conf'
-#
-# You've been warned!
-#NTFY_PASSWORD=""
-
+# WARNING: For security reasons, the auth file should have read permission only
+# for the root user (600). You have been warned!
+#NTFY_AUTH_FILE="/etc/ntfy-resources-usage/auth"
 
 # The ntfy priority level: [min, low, default, high, urgent]
 NTFY_PRIORITY="default"
-
-# Check for RAM?
-CHECK_RAM=true
-
-# Check for disk usage?
-CHECK_DISK=true
-
-# Check for battery?
-CHECK_BATTERY=false
-
-# Low memory(RAM) title
-RAM_TITLE="$DEVICE_NAME: Running out of memory"
-
-# Low storage title
-DISK_TITLE="$DEVICE_NAME: Running out of storage"
-
-# Low memory(RAM) message
-RAM_MSG="$DEVICE_NAME is running out of memory: "
-
-# Low battery title
-BATTERY_TITLE="$DEVICE_NAME: Running out of battery"
-
-# Low storage message
-DISK_MSG="$DEVICE_NAME is running out of storage: "
-
-# Low battery message
-BATTERY_RATIO="$DEVICE_NAME: Running out of battery: "
-
-# Memory ratio to send alert
-MIN_RAM_RATIO="20"
-
-# Disk ratio to send alert
-MIN_DISK_RATIO="20"
-
-# Battery ratio to send alert
-MIN_BATTERY_RATIO="20"
 
 # Delay time between resources checks in seconds
 # Here are 2 variable examples, one with minutes where you don't need to
@@ -91,6 +49,50 @@ DELAY_TIME="$((5 * 60))" # for minutes
 
 # Debug info. Uncomment to send debug info.
 #DEBUG="true"
+
+
+## << C H E C K >>
+# Check for RAM?
+CHECK_RAM=true
+
+# Check for disk usage?
+CHECK_DISK=true
+
+# Check for battery?
+CHECK_BATTERY=false
+
+
+## << TITLE >>
+# Low memory(RAM) title
+RAM_TITLE="$DEVICE_NAME: Running out of memory"
+
+# Low storage title
+DISK_TITLE="$DEVICE_NAME: Running out of storage"
+
+# Low battery title
+BATTERY_TITLE="$DEVICE_NAME: Running out of battery"
+
+
+## << M E S S A G E >>
+# Low memory(RAM) message
+RAM_MSG="$DEVICE_NAME is running out of memory: "
+
+# Low storage message
+DISK_MSG="$DEVICE_NAME is running out of storage: "
+
+# Low battery message
+BATTERY_MSG="$DEVICE_NAME: Running out of battery: "
+
+
+## << R A T I O >>
+# Memory ratio to send alert
+MIN_RAM_RATIO="20"
+
+# Disk ratio to send alert
+MIN_DISK_RATIO="20"
+
+# Battery ratio to send alert
+MIN_BATTERY_RATIO="20"
 
 ### End Of Variables ###
 
@@ -119,8 +121,7 @@ fi
 
 if [ -z "${NTFY_TOPIC}" ]; then
   printf "$ERR No NTFY topic was set. nfty-resources-usage can't run without a topic.\n"
-  printf "$ERR Exiting...\n"
-  exit 1
+  exit_unsuccess
 fi
 
 # Terminal colors
@@ -190,8 +191,8 @@ get_os() {
       ;;
 
     *)
-      printf "$ERR Unknown OS detected: \`$kernel_name', aborting...\n"
-      exit 1
+      printf "$ERR Unknown OS detected: \`$kernel_name'\n"
+      exit_unsuccess
       ;;
   esac
 }
@@ -211,8 +212,7 @@ get_mem() {
 get_disk() {
   type -p df &>/dev/null || {
     printf "$ERR Disk requires \`df' to function! Install \`df' to get disk info.\n";
-    printf "$ERR Exiting...\n"
-    exit 1
+    exit_unsuccess
   }
 
   df_version=$(df --version 2>&1)
@@ -232,7 +232,7 @@ get_disk() {
 
     *Tracker*) # Haiku
       printf "$ERR Your version of \`df' cannot be used due to the non-standard flags!\n"
-      printf "$ERR Exiting...\n"
+      exit_unsuccess
       ;;
 
     *)
@@ -248,7 +248,7 @@ get_disk() {
   # Stop here if 'df' fails to print disk info.
   [[ ${disks[*]} ]] || {
     printf "$ERR Disk: df failed to print the disks, make sure the disk_show array is set properly.\n"
-    printf "$ERR Exiting...\n"
+    exit_unsuccess
   }
 
   for disk in "${disks[@]}"; do
@@ -343,7 +343,7 @@ get_battery() {
 ################################################
 
 
-unset_var() {
+unset_vars() {
   # get_mem
   unset a
   unset mem_used
@@ -376,26 +376,62 @@ unset_var() {
   unset curl_args
 }
 
+exit_unsuccess() {
+  printf "$ERR Exiting...\n"
+  exit 1
+}
+
+get_credetentials() {
+  # Check if auth file exists and it's readable
+  if [ ! -r "${NTFY_AUTH_FILE}" ]; then
+    if [ ! -f "${NTFY_AUTH_FILE}" ]; then
+      printf "$ERR Auth file does not exist! Please create one or comment out \`NTFY_AUTH_FILE'.\n"
+    else
+      printf "$ERR Cannot read auth file! Are the file permissions correct (600)?\tAre you running \`ntfy-resources-usage' with the right user?\n"
+    fi
+    exit_unsuccess
+  fi
+
+  # Sanitize the auth file
+  NTFY_AUTH=$( < "${NTFY_AUTH_FILE}")
+
+  # Check if empty
+  if [ -z ${NTFY_AUTH} ]; then
+    printf "$ERR Auth file is empty! Please enter credetentials in \`${NTFY_AUTH_FILE}' or comment out \`NTFY_AUTH_FILE'.\n"
+    exit_unsuccess
+  fi
+}
+
 check_http_status() {
   case ${1} in
     200)
       return 0
       ;;
 
-    403)
-      printf "$ERR Couldn't authenticate to \`${NTFY_TOPIC}', are credentials valid?\n"
-      printf "$ERR Exiting...\n"
-      exit 1
+    401 | 403)
+      printf "$ERR Couldn't authenticate to \`${NTFY_TOPIC}'"
+      if [ -z "${NTFY_AUTH_FILE}" ]; then
+        printf " and there is no auth file, please set one.n"
+      else
+        printf ", are credentials valid?"
+      fi
+      printf " (Error ${1})\n"
+      exit_unsuccess
       ;;
 
     404)
       printf "$ERR \`${NTFY_TOPIC}' could not be found, is NTFY_TOPIC correct?\n"
-      printf "$ERR Exiting...\n"
-      exit 1
+      exit_unsuccess
+      ;;
+
+    418)
+      printf "$ERR The NTFY_TOPIC address you've entered is actually teapot, therefore it cannot brew coffee (Error 418).\n"
+      printf "$ERR You've been basically banned or something from \`${NTFY_TOPIC}'. Perhaps you've been sending too much furry p*rn in there?\n"
+      exit_unsuccess
       ;;
 
     *)
-      printf "$WARN Uncatched HTTP response status code, continuing anyway...\n"
+      printf "$WARN Uncatched HTTP response status code \`${1}', continuing anyway...\n"
       ;;
   esac
 }
@@ -413,9 +449,9 @@ check_memory() {
     # Build up the curl arguments
     curl_args=(--silent -o /dev/null -w "%{http_code}")
 
-    # If $NTFY_USER and $NTFY_PASSWORD do not exist, do NOT use them
-    if [ ! -z "$NTFY_USER" ] && [ ! -z "$NTFY_PASSWORD" ]; then
-      curl_args+=(-u "${NTFY_USER}:${NTFY_PASSWORD}")
+    # If $NTFY_AUTH does not exist, do NOT use it
+    if [ ! -z "$NTFY_AUTH" ]; then
+      curl_args+=(-u "${NTFY_AUTH}")
     fi
 
     # Add the rest of the arguments that will make up the final ntfy message
@@ -430,7 +466,7 @@ check_memory() {
     http_code=$(curl "${curl_args[@]}")
     check_http_status ${http_code}
 
-    if [ $DEBUG == "true" ]; then
+    if [ "$DEBUG" == "true" ]; then
       printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${RAM_MSG}${FREE_MEM} MiB out of ${TOTAL_MEM} MiB\n"
     fi
   fi
@@ -449,14 +485,14 @@ check_disk() {
     # Build up the curl arguments
     curl_args=(--silent -o /dev/null -w "%{http_code}")
 
-    # If $NTFY_USER and $NTFY_PASSWORD do not exist, do NOT use them
-    if [ ! -z "${NTFY_USER}" ] && [ ! -z "${NTFY_PASSWORD}" ]; then
-      curl_args+=(-u "${NTFY_USER}:${NTFY_PASSWORD}")
+    # If $NTFY_AUTH does not exist, do NOT use it
+    if [ ! -z "$NTFY_AUTH" ]; then
+      curl_args+=(-u ${NTFY_AUTH})
     fi
 
     # Add the rest of the arguments that will make up the final ntfy message
     curl_args+=(
-      -H "title: ${RAM_TITLE}"
+      -H "title: ${DISK_TITLE}"
       -H "priority: ${NTFY_PRIORITY}"
       -H "tags: floppy_disk"
       -d "${DISK_MSG}${FREE_DISK} GiB out of ${TOTAL_DISK} GiB"
@@ -465,7 +501,7 @@ check_disk() {
 
     http_code=$(curl "${curl_args[@]}")
     check_http_status ${http_code}
-    if [ $DEBUG == "true" ]; then
+    if [ "$DEBUG" == true ]; then
       printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${DISK_MSG}${FREE_DISK} out of ${TOTAL_DISK}\n"
     fi
   fi
@@ -476,18 +512,17 @@ check_battery() {
   RATIO_BATTERY=$(echo ${battery} | tr -d '%')
 
   if [ $RATIO_BATTERY -lt $MIN_BATTERY_RATIO ]; then
-
     # Build up the curl arguments
     curl_args=(--silent -o /dev/null -w "%{http_code}")
 
-    # If $NTFY_USER and $NTFY_PASSWORD do not exist, do NOT use them
-    if [ ! -z "${NTFY_USER}" ] && [ ! -z "${NTFY_PASSWORD}" ]; then
-      curl_args+=(-u "${NTFY_USER}:${NTFY_PASSWORD}")
+    # If $NTFY_AUTH does not exist, do NOT use it
+    if [ ! -z "$NTFY_AUTH" ]; then
+      curl_args+=(-u "${NTFY_AUTH}")
     fi
 
     # Add the rest of the arguments that will make up the final ntfy message
     curl_args+=(
-      -H "title: ${RAM_TITLE}"
+      -H "title: ${BATTERY_TITLE}"
       -H "priority: ${NTFY_PRIORITY}"
       -H "tags: battery"
       -d "${BATTERY_MSG}${RATIO_BATTERY}%"
@@ -496,34 +531,51 @@ check_battery() {
 
     http_code=$(curl "${curl_args[@]}")
     check_http_status ${http_code}
-    if [ $DEBUG == "true" ]; then
+    if [ "$DEBUG" == "true" ]; then
       printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${DISK_MSG}${FREE_DISK} out of ${TOTAL_DISK}\n"
     fi
   fi
 }
 
 main() {
+  # If default config, inform the user and exit unsuccessfuly
+  if [ "${NTFY_TOPIC}" = "ntfy.sh/" ]; then
+    printf "$ERR You are probably using the default configuration!\n"
+    printf "$ERR \`NTFY_TOPIC' is set to the default \`ntfy.sh/' topic, which is an invalid topic.\n"
+    printf "$ERR Please edit the configuration file and set the right values.\n"
+    printf "$ERR You can get help from https://github.com/TheRealOne78/ntfy-resources-usage/wiki\n"
+    exit 1
+  fi
+
   # Prepare OS info
   get_os
+
+  if [ ! -z "$NTFY_AUTH_FILE" ]; then
+    # Get user and password
+    get_credetentials
+  fi
+
+  if [ "$CHECK_RAM" != "true" ] && [ "$CHECK_DISK" != "true" ] && [ "$CHECK_BATTERY" != "true"  ]; then
+     printf "There is nothing set to check. Exiting...\n"
+     exit 0
+  fi
 
   # Get resource info from computer, check it, send it and repeat
   while (true); do
 
-    if [ $CHECK_RAM ]; then
+    if [ "$CHECK_RAM" == "true" ]; then
       check_memory
     fi
 
-    if [ $CHECK_DISK ]; then
+    if [ "$CHECK_DISK" == "true" ]; then
       check_disk
     fi
 
-    $CHECK_BATTERY=true #TODO: TEST
-
-    if [ $CHECK_BATTERY ]; then
+    if [ "$CHECK_BATTERY" == "true" ]; then
       check_battery
     fi
 
-    unset_var
+    unset_vars
 
     sleep $DELAY_TIME # Check again in $DELAY_TIME seconds
 
