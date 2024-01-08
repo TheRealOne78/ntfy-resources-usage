@@ -2,7 +2,7 @@
 
 #########################################################################
 #                                                                       #
-# ntfy-resources-usage plugin v1.0.2                                    #
+# ntfy-resources-usage plugin v1.0.3-beta                               #
 # Send notifications to your ntfy client when your computer runs out of #
 # resources. For more info, check out:                                  #
 # https://github.com/TheRealOne78/ntfy-resources-usage                  #
@@ -40,7 +40,7 @@ NTFY_PRIORITY="default"
 
 # Delay time between resources checks in seconds
 # Here are 2 variable examples, one with minutes where you don't need to
-# calculate how many seconds in 'n' minutes and another one that uses seconds.
+# calculate how many seconds in `n' minutes and another one that uses seconds.
 # Make sure to comment/uncomment
 #
 DELAY_TIME="$((5 * 60))" # for minutes
@@ -96,43 +96,125 @@ MIN_BATTERY_RATIO="20"
 
 ### End Of Variables ###
 
-##############################################
+ ##############################################
 #  _____  ___  ___________  _______  ___  ___  #
 # (\"   \|"  \("     _   ")/"     "||"  \/"  | #
 # |.\\   \    |)__/  \\__/(: ______) \   \  /  #
 # |: \.   \\  |   \\_ /    \/    |    \\  \/   #
 # |.  \    \. |   |.  |    // ___)    /   /    #
 # |    \    \ |   \:  |   (:  (      /   /     #
-#  \___|\____\)    \__|    \__/     |__v1.0.2  #
-##############################################
+#  \___|\____\)    \__|    \__/     |__v1.0.3-b#
+ ##############################################
 
 ### Code ###
 
+## Signal handling
 # Handle INT and TERM signals by exiting with 0
 trap "exit 0" SIGINT
 trap "exit 0" SIGTERM
 
-# Import user defined variables
-if [ -f "/etc/ntfy-resources-usage/ntfy-resources-usage.conf" ]; then
-  source "/etc/ntfy-resources-usage/ntfy-resources-usage.conf"
-else
-  printf "$INFO No configuration file found, using default parameters.\n"
-fi
 
-if [ -z "${NTFY_TOPIC}" ]; then
-  printf "$ERR No NTFY topic was set. nfty-resources-usage can't run without a topic.\n"
-  exit_unsuccess
-fi
-
-# Terminal colors
-RED="\e[31m"
-YELLOW="\e[33m"
-BLUE="\e[34m"
-ENDCOLOR="\e[0m"
+# Define terminal colors
+RED="\033[31m"
+YELLOW="\033[33m"
+BLUE="\033[34m"
+ENDCOLOR="\033[0m"
 
 INFO="["$BLUE"i"$ENDCOLOR"]"
 WARN="["$YELLOW"w"$ENDCOLOR"]"
 ERR="["$RED"e"$ENDCOLOR"]"
+
+
+# Backup all original environment variables set in the executable in case that
+# the user config-ed stuff directly in the executable and need the originals
+# later on ...
+_BAK_DEVICE_NAME=${DEVICE_NAME}
+_BAK_NTFY_TOPIC=${NTFY_TOPIC}
+_BAK_NTFY_AUTH_FILE=${NTFY_AUTH_FILE}
+_BAK_NTFY_PRIORITY=${NTFY_PRIORITY}
+_BAK_DELAY_TIME=${DELAY_TIME}
+_BAK_DELAY_TIME=${DELAY_TIME}
+_BAK_DEBUG=${DEBUG}
+_BAK_CHECK_RAM=${CHECK_RAM}
+_BAK_CHECK_DISK=${CHECK_DISK}
+_BAK_CHECK_BATTERY=${CHECK_BATTERY}
+_BAK_RAM_TITLE=${RAM_TITLE}
+_BAK_DISK_TITLE=${DISK_TITLE}
+_BAK_BATTERY_TITLE=${BATTERY_TITLE}
+_BAK_RAM_MSG=${RAM_MSG}
+_BAK_DISK_MSG=${DISK_MSG}
+_BAK_BATTERY_MSG=${BATTERY_MSG}
+_BAK_MIN_RAM_RATIO=${MIN_RAM_RATIO}
+_BAK_MIN_DISK_RATIO=${MIN_DISK_RATIO}
+_BAK_MIN_BATTERY_RATIO=${MIN_BATTERY_RATIO}
+
+
+exit_unsuccess() {
+  printf "$ERR Exiting...\n"
+  exit 1
+}
+
+
+custom_sleep() {
+  # `sleep` takes over SIGHUP.  As a workaround, sleep for just one second repeatedly
+
+  trap 'reload_config; return' HUP
+  end_time=$(( $(date +%s) + $1 ))
+  while [ $(date +%s) -lt $end_time ]; do
+    sleep 1
+  done
+}
+
+
+source_config() {
+  if [ -f "/etc/ntfy-resources-usage/ntfy-resources-usage.conf" ]; then
+    if [ ! -r "/etc/ntfy-resources-usage/ntfy-resources-usage.conf" ]; then
+      printf "$ERR Cannot read config file! Are the file permissions correct?\tAre you running \`ntfy-resources-usage' with the right user?\n"
+      exit_unsuccess
+    fi
+    source "/etc/ntfy-resources-usage/ntfy-resources-usage.conf"
+  else
+    printf "$INFO No configuration file found, using default parameters.\n"
+  fi
+
+  if [ -z "${NTFY_TOPIC}" ]; then
+    printf "$ERR No NTFY topic was set. nfty-resources-usage can't run without a topic.\n"
+    exit_unsuccess
+  fi
+}
+
+
+reload_config() {
+  # set default variables from the executable shell script file
+  DEVICE_NAME=${_BAK_DEVICE_NAME}
+  NTFY_TOPIC=${_BAK_NTFY_TOPIC}
+  NTFY_AUTH_FILE=${_BAK_NTFY_AUTH_FILE}
+  NTFY_PRIORITY=${_BAK_NTFY_PRIORITY}
+  DELAY_TIME=${_BAK_DELAY_TIME}
+  DELAY_TIME=${_BAK_DELAY_TIME}
+  DEBUG=${_BAK_DEBUG}
+  CHECK_RAM=${_BAK_CHECK_RAM}
+  CHECK_DISK=${_BAK_CHECK_DISK}
+  CHECK_BATTERY=${_BAK_CHECK_BATTERY}
+  RAM_TITLE=${_BAK_RAM_TITLE}
+  DISK_TITLE=${_BAK_DISK_TITLE}
+  BATTERY_TITLE=${_BAK_BATTERY_TITLE}
+  RAM_MSG=${_BAK_RAM_MSG}
+  DISK_MSG=${_BAK_DISK_MSG}
+  BATTERY_MSG=${_BAK_BATTERY_MSG}
+  MIN_RAM_RATIO=${_BAK_MIN_RAM_RATIO}
+  MIN_DISK_RATIO=${_BAK_MIN_DISK_RATIO}
+  MIN_BATTERY_RATIO=${_BAK_MIN_BATTERY_RATIO}
+
+  # Override these variables with variables from the config file, if that's the case
+  source_config
+
+  if [ "$DEBUG" = "true" ]; then
+    printf "$INFO Reloaded config file\n"
+  fi
+
+  main
+}
 
 
 ############################################################
@@ -240,12 +322,12 @@ get_disk() {
       ;;
   esac
 
-  # Create an array called 'disks' where each element is a separate line from
+  # Create an array called `disks' where each element is a separate line from
   # df's output. We then unset the first element which removes the column titles.
   IFS=$'\n' read -d "" -ra disks <<< "$(df "${df_flags[@]}" "${disk_show[@]:-/}")"
   unset "disks[0]"
 
-  # Stop here if 'df' fails to print disk info.
+  # Stop here if `df' fails to print disk info.
   [[ ${disks[*]} ]] || {
     printf "$ERR Disk: df failed to print the disks, make sure the disk_show array is set properly.\n"
     exit_unsuccess
@@ -376,10 +458,6 @@ unset_vars() {
   unset curl_args
 }
 
-exit_unsuccess() {
-  printf "$ERR Exiting...\n"
-  exit 1
-}
 
 get_credetentials() {
   # Check if auth file exists and it's readable
@@ -401,6 +479,7 @@ get_credetentials() {
     exit_unsuccess
   fi
 }
+
 
 check_http_status() {
   case ${1} in
@@ -430,11 +509,18 @@ check_http_status() {
       exit_unsuccess
       ;;
 
+    429)
+      printf "$WARN \`${NTFY_TOPIC}' returned 'error 429 - Too Many Requests'.\n"
+      printf "$WARN Try setting the \`DELAY_TIME' variable with a higher value.\n"
+      printf "$WARN Continuing anyway...\n"
+      ;;
+
     *)
       printf "$WARN Uncatched HTTP response status code \`${1}', continuing anyway...\n"
       ;;
   esac
 }
+
 
 check_memory() {
   get_mem
@@ -466,11 +552,12 @@ check_memory() {
     http_code=$(curl "${curl_args[@]}")
     check_http_status ${http_code}
 
-    if [ "$DEBUG" == "true" ]; then
+    if [ "$DEBUG" = "true" ]; then
       printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${RAM_MSG}${FREE_MEM} MiB out of ${TOTAL_MEM} MiB\n"
     fi
   fi
 }
+
 
 check_disk() {
   get_disk
@@ -501,11 +588,12 @@ check_disk() {
 
     http_code=$(curl "${curl_args[@]}")
     check_http_status ${http_code}
-    if [ "$DEBUG" == true ]; then
+    if [ "$DEBUG" = true ]; then
       printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${DISK_MSG}${FREE_DISK} out of ${TOTAL_DISK}\n"
     fi
   fi
 }
+
 
 check_battery() {
   get_battery
@@ -531,13 +619,18 @@ check_battery() {
 
     http_code=$(curl "${curl_args[@]}")
     check_http_status ${http_code}
-    if [ "$DEBUG" == "true" ]; then
-      printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${DISK_MSG}${FREE_DISK} out of ${TOTAL_DISK}\n"
+    if [ "$DEBUG" = "true" ]; then
+      printf "$INFO Sent notification to \`${NTFY_TOPIC}', priority - ${NTFY_PRIORITY}, message ${BATTERY_MSG}${RATIO_BATTERY}%%\n"
     fi
   fi
 }
 
-main() {
+
+prep() {
+
+  # Source the configuration file, if that's the case
+  source_config
+
   # If default config, inform the user and exit unsuccessfuly
   if [ "${NTFY_TOPIC}" = "ntfy.sh/" ]; then
     printf "$ERR You are probably using the default configuration!\n"
@@ -559,27 +652,36 @@ main() {
      printf "There is nothing set to check. Exiting...\n"
      exit 0
   fi
+}
+
+
+# Handle HUP signal for
+trap 'reload_config' HUP
+
+main() {
 
   # Get resource info from computer, check it, send it and repeat
-  while (true); do
+  while true; do
 
-    if [ "$CHECK_RAM" == "true" ]; then
+    if [ "$CHECK_RAM" = "true" ]; then
       check_memory
     fi
 
-    if [ "$CHECK_DISK" == "true" ]; then
+    if [ "$CHECK_DISK" = "true" ]; then
       check_disk
     fi
 
-    if [ "$CHECK_BATTERY" == "true" ]; then
+    if [ "$CHECK_BATTERY" = "true" ]; then
       check_battery
     fi
 
     unset_vars
 
-    sleep $DELAY_TIME # Check again in $DELAY_TIME seconds
+    custom_sleep $DELAY_TIME # Check again in $DELAY_TIME seconds
 
   done
 }
+
+prep
 
 main

@@ -1,20 +1,20 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Copyright (c) 2024 TheRealOne78
 # Distributed under the terms of the GNU General Public License v3+
 # https://www.gnu.org/licenses/gpl-3.0.en.html
 
-RED="\e[31m"
-YELLOW="\e[33m"
-BLUE="\e[34m"
-ENDCOLOR="\e[0m"
+RED="\033[31m"
+YELLOW="\033[33m"
+BLUE="\033[34m"
+ENDCOLOR="\033[0m"
 
 INFO="["$BLUE"i"$ENDCOLOR"]"
 WARN="["$YELLOW"w"$ENDCOLOR"]"
 ERR="["$RED"e"$ENDCOLOR"]"
 
 # Check for root
-if [[ "$EUID" != 0 ]]; then
+if [ "$EUID" -ne 0 ]; then
   printf "$ERR Please run this script with super user permission!\n"
   exit $EUID
 fi
@@ -22,7 +22,7 @@ fi
 # Install Dependencies
 bash ./configure.sh
 EXIT_CODE=$?
-if [[ ! $EXIT_CODE -eq 0 ]]; then
+if [ $EXIT_CODE -ne 0 ]; then
   exit $EXIT_CODE;
 fi
 
@@ -36,7 +36,7 @@ else
   make install install_config
 fi
 EXIT_CODE=$?
-if [[ ! $EXIT_CODE -eq 0 ]]; then
+if [ $EXIT_CODE -ne 0 ]; then
   printf "$ERR Couldn't install! Please check if all dependencies are installed correctly!\n"
   exit $EXIT_CODE
 fi
@@ -73,7 +73,7 @@ install_init() {
     esac
 }
 
-if [[ $SYSTEMD == true && $OPENRC == true ]]; then
+if [ "${SYSTEMD}" = true ] && [ "${OPENRC}" = true ]; then
   printf "$INFO Both Systemd and OpenRC were detected to the system. Please choose which init service to use: [1-2/c]\n"
   printf "1) Systemd\n"
   printf "2) OpenRC\n"
@@ -82,12 +82,12 @@ if [[ $SYSTEMD == true && $OPENRC == true ]]; then
   read INIT_CHOICE
   install_init
 
-elif [[ $SYSTEMD == true ]]; then
+elif [ "${SYSTEMD}" = true ]; then
   INIT_CHOICE=1
   install_init
   printf "$INFO Installed Systemd service. Reboot after setup to start it.\n"
 
-elif [[ $OPENRC == true ]]; then
+elif [ $OPENRC == true ]; then
   INIT_CHOICE=2
   install_init
   printf "$INFO Installed OpenRC service. Reboot after setup to start it.\n"

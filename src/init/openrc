@@ -4,8 +4,27 @@
 # https://www.gnu.org/licenses/gpl-3.0.en.html
 
 name="ntfy-resources-usage-plugin"
+extra_started_commands="reload"
 description="Send NTFY alerts to your smart-phone when your unix computer is running out of resources."
 
 supervisor="supervise-daemon"
-command="/bin/bash /usr/bin/ntfy-resources-usage"
+command="/usr/bin/ntfy-resources-usage"
 command_background="true"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+depend() {
+  need net
+  use dns logger
+}
+
+start() {
+    echo "Starting $RC_SVCNAME..."
+    start-stop-daemon --start --background --pidfile "$pidfile" --make-pidfile --exec "$command"
+    echo "$RC_SVCNAME started."
+}
+
+reload() {
+  ebegin "Reloading ${RC_SVCNAME}"
+  start-stop-daemon --signal HUP --pidfile "$pidfile"  # Send SIGHUP to the process
+  eend $?
+}

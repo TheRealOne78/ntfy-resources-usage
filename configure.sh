@@ -1,19 +1,19 @@
-#!/bin/bash
+#!/bin/sh
 # Copyright (c) 2024 TheRealOne78
 # Distributed under the terms of the GNU General Public License v3+
 # https://www.gnu.org/licenses/gpl-3.0.en.html
 
-RED="\e[31m"
-YELLOW="\e[33m"
-BLUE="\e[34m"
-ENDCOLOR="\e[0m"
+RED="\033[31m"
+YELLOW="\033[33m"
+BLUE="\033[34m"
+ENDCOLOR="\033[0m"
 
 INFO="["$BLUE"i"$ENDCOLOR"]"
 WARN="["$YELLOW"w"$ENDCOLOR"]"
 ERR="["$RED"e"$ENDCOLOR"]"
 
 # Check for root
-if [[ "$EUID" != 0 ]]; then
+if [ "$EUID" -ne 0 ]; then
   printf "$ERR Please run this script with super user permission!\n"
   exit 1
 fi
@@ -58,7 +58,7 @@ fi
 
 # Choosing the right package manager
 ## Linux distributions
-if [ $WILL_INSTALL == true ]; then
+if [ "${WILL_INSTALL}" = true ]; then
   ### Debian
   if [ -x "$(command -v apt-get)" ]; then
     printf "$INFO apt-get package manager detected\n"
@@ -114,25 +114,25 @@ $ERR For more info, see https://wiki.gentoo.org/wiki/Emerge and https://wiki.gen
   printf "$INFO $PKG_MGR will be used to install the required dependencies\n"
   # Install dependencies
   ## Debian
-  if [ $PKG_MGR == "apt-get" ]; then
+  if [ "${PKG_MGR}" = "apt-get" ]; then
     $PKG_MGR install -y $DEB_DEPENDENCIES
   ## Arch
-  elif [ $PKG_MGR == "pacman" ]; then
+  elif [ "${PKG_MGR}" = "pacman" ]; then
     $PKG_MGR -Sy --noconfirm $DEPENDENCIES
   ## RedHat
-  elif [ $PKG_MGR == "dnf" ]; then
+  elif [ "${PKG_MGR}" = "dnf" ]; then
     $PKG_MGR install -y $RPM_DEPENDENCIES
   ## CentOS
-  elif [ $PKG_MGR == "yum" ]; then
+  elif [ "${PKG_MGR}" = "yum" ]; then
     $PKG_MGR -y install $RPM_DEPENDENCIES
   ## FreeBSD
-  elif [ $PKG_MGR == "pkg" ]; then
+  elif [ "${PKG_MGR}" = "pkg" ]; then
     $PKG_MGR install -y $BSD_DEPENDENCIES
   ## OpenBSD
-  elif [ $PKG_MGR == "pkg_add" ]; then
+  elif [ "${PKG_MGR}" = "pkg_add" ]; then
     $PKG_MGR $BSD_DEPENDENCIES
   ## NetBSD
-  elif [ $PKG_MGR == "pkgin" ]; then
+  elif [ "${PKG_MGR}" = "pkgin" ]; then
     $PKG_MGR -y install $BSD_DEPENDENCIES
   fi
   if [ $? -eq 0 ]; then
