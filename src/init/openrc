@@ -10,6 +10,7 @@ description="Send NTFY alerts to your smart-phone when your unix computer is run
 supervisor="supervise-daemon"
 command="/usr/bin/ntfy-resources-usage"
 command_background="true"
+logfile="/var/log/ntfy-resources-usage.log"
 pidfile="/run/${RC_SVCNAME}.pid"
 
 depend() {
@@ -18,9 +19,9 @@ depend() {
 }
 
 start() {
-    echo "Starting $RC_SVCNAME..."
-    start-stop-daemon --start --background --pidfile "$pidfile" --make-pidfile --exec "$command"
-    echo "$RC_SVCNAME started."
+  ebegin "Starting $RC_SVCNAME"
+  start-stop-daemon --start --background --pidfile "$pidfile" --make-pidfile --exec "$command" --stdout "$logfile" --stderr "$logfile"
+  eend $?
 }
 
 reload() {

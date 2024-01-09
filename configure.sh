@@ -23,10 +23,10 @@ PKG_MGR=""          # The package manager that will install the dependencies
 WILL_INSTALL=false  # Check if anything will be installed, else skip
 
 # List of dependencies
-# Common Linux: bash make curl
-# Debian:       bash make curl
-# RHEL:         bash make curl
-# BSD:          bash gmake curl
+# Common Linux: bash make curl bc
+# Debian:       bash make curl bc
+# RHEL:         bash make curl bc
+# BSD:          bash gmake curl bc
 
 # Checking existing dependencies
 if [ ! -x "$(command -v bash)" ]; then
@@ -53,6 +53,15 @@ if [ ! -x "$(command -v curl)" ]; then
   DEB_DEPENDENCIES="$DEB_DEPENDENCIES curl"
   RPM_DEPENDENCIES="$RPM_DEPENDENCIES curl"
   BSD_DEPENDENCIES="$BSD_DEPENDENCIES curl"
+  WILL_INSTALL=true
+fi
+
+if [ ! -x "$(command -v bc)" ]; then
+  printf "$INFO bc not detected, adding it in the dependencies install queue\n"
+  DEPENDENCIES="$DEPENDENCIES bc"
+  DEB_DEPENDENCIES="$DEB_DEPENDENCIES bc"
+  RPM_DEPENDENCIES="$RPM_DEPENDENCIES bc"
+  BSD_DEPENDENCIES="$BSD_DEPENDENCIES bc"
   WILL_INSTALL=true
 fi
 

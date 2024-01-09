@@ -158,7 +158,6 @@ exit_unsuccess() {
 custom_sleep() {
   # `sleep` takes over SIGHUP.  As a workaround, sleep for just one second repeatedly
 
-  trap 'reload_config; return' HUP
   end_time=$(( $(date +%s) + $1 ))
   while [ $(date +%s) -lt $end_time ]; do
     sleep 1
@@ -210,7 +209,7 @@ reload_config() {
   source_config
 
   if [ "$DEBUG" = "true" ]; then
-    printf "$INFO Reloaded config file\n"
+    printf "$INFO Reloaded the configuration file\n"
   fi
 
   main
@@ -235,7 +234,7 @@ get_os() {
   kernel_version="${uname[1]}"
   kernel_machine="${uname[2]}"
 
-  if [ "$kernel_name" == "Darwin" ]; then
+  if [ "$kernel_name" = "Darwin" ]; then
     # macOS can report incorrect versions unless this is 0.
     # https://github.com/dylanaraps/neofetch/issues/1607
     export SYSTEM_VERSION_COMPAT=0
@@ -487,7 +486,19 @@ check_http_status() {
       return 0
       ;;
 
-    401 | 403)
+    400) # Bad Request
+      printf "$ERR Fatal error, CURl returned with \`Error 400 - Bad Request'.\n"
+      printf "$ERR Please check the following:\n"
+      printf "$ERR * if you didn't write \`https://' in the configuration file, check if the NTFY instance supports unsecured HTTP\n"
+      printf "$ERR * if CURl is working properly;\n"
+      printf "$ERR * if your distribution's Forum pages/News/IRC mention any recent problems with CURl that could be related to this.\n\n"
+      printf "$ERR If none of that helped, please report this incident at \`https://github.com/TheRealOne78/ntfy-resources-usage/issues'\n"
+      printf "$ERR with as much details as possible (screenshots, logs, configuration, init system, OS, shell, etc.).\n"
+      printf "$ERR Do not forget to remove sensitive data first (username, password, etc.), or else your issue will be removed.\n"
+      exit_unsuccess
+      ;;
+
+    401 | 403 | 511) # Unauthorized | Forbidden | Network Authentication Required
       printf "$ERR Couldn't authenticate to \`${NTFY_TOPIC}'"
       if [ -z "${NTFY_AUTH_FILE}" ]; then
         printf " and there is no auth file, please set one.n"
@@ -498,20 +509,47 @@ check_http_status() {
       exit_unsuccess
       ;;
 
-    404)
-      printf "$ERR \`${NTFY_TOPIC}' could not be found, is NTFY_TOPIC correct?\n"
+    404) # Not found
+      printf "$ERR \`${NTFY_TOPIC}' could not be found, is NTFY_TOPIC correct? (Error 404)\n"
       exit_unsuccess
       ;;
 
-    418)
+    418) # I'm a teapot
       printf "$ERR The NTFY_TOPIC address you've entered is actually teapot, therefore it cannot brew coffee (Error 418).\n"
       printf "$ERR You've been basically banned or something from \`${NTFY_TOPIC}'. Perhaps you've been sending too much furry p*rn in there?\n"
       exit_unsuccess
       ;;
 
-    429)
-      printf "$WARN \`${NTFY_TOPIC}' returned 'error 429 - Too Many Requests'.\n"
+    429) # Too Many Requests
+      printf "$WARN \`${NTFY_TOPIC}' returned 'Error 429 - Too Many Requests'.\n"
       printf "$WARN Try setting the \`DELAY_TIME' variable with a higher value.\n"
+      printf "$WARN Continuing anyway...\n"
+      ;;
+
+    500) # Internal Server Error
+      printf "$WARN \`${NTFY_TOPIC}' returned 'Error 500 - Internal Server Error'.\n"
+      printf "$WARN The server is currently failing and will likely be resolved in the future.\n"
+      printf "$WARN Try contacting the system administrator of your NTFY instance if you can't wait any longer.\n"
+      printf "$WARN Continuing anyway...\n"
+      ;;
+
+    501) # Not Implemented
+      printf "$ERR \`${NTFY_TOPIC}' returned 'Error 501 - Not Implemented'.\n"
+      printf "$ERR The server does not have a running NTFY daemon instance. Is \`${NTFY_TOPIC}' right?\n"
+      exit_unsuccess
+      ;;
+
+    502) # Internal Server Error
+      printf "$WARN \`${NTFY_TOPIC}' returned 'Error 502 - Bad Gateway'.\n"
+      printf "$WARN The server is currently failing and will likely be resolved in the future.\n"
+      printf "$WARN Try contacting the system administrator of your NTFY instance if you can't wait any longer.\n"
+      printf "$WARN Continuing anyway...\n"
+      ;;
+
+    503) # Not Implemented
+      printf "$WARN \`${NTFY_TOPIC}' returned 'Error 503 - Service Unavailable'.\n"
+      printf "$WARN The NTFY service is currently unavailable.\n"
+      printf "$WARN Common causes are the service being down for maintenance or it's overloaded.\n"
       printf "$WARN Continuing anyway...\n"
       ;;
 
@@ -526,11 +564,11 @@ check_memory() {
   get_mem
   USED_MEM="$((mem_used / 1024))"
   TOTAL_MEM="$((mem_total / 1024))"
-  FREE_MEM="$((TOTAL_MEM - USED_MEM))"
-  RATIO_MEM="$(($(($FREE_MEM * 100)) / $TOTAL_MEM ))"
+  FREE_MEM=$(echo "$TOTAL_MEM - $USED_MEM" | bc -l)
+  RATIO_MEM=$(echo "scale=2; ($FREE_MEM / $TOTAL_MEM) * 100" | bc -l)
 
   # Check and send memory warnings
-  if [ ${RATIO_MEM} -lt ${MIN_RAM_RATIO} ]; then
+  if [ "$(echo "${RATIO_MEM} < ${MIN_RAM_RATIO}" | bc -l)" -eq 1 ]; then
 
     # Build up the curl arguments
     curl_args=(--silent -o /dev/null -w "%{http_code}")
@@ -563,11 +601,11 @@ check_disk() {
   get_disk
   USED_DISK="$(echo ${disk_info[-4]} | sed 's/[A-Za-z]//g')"
   TOTAL_DISK="$(echo ${disk_info[-5]} | sed 's/[A-Za-z]//g')"
-  FREE_DISK="$(($TOTAL_DISK - $USED_DISK))"
-  RATIO_DISK="$(($(($FREE_DISK * 100)) / $TOTAL_DISK ))"
+  FREE_DISK=$(echo "$TOTAL_DISK - $USED_DISK" | bc -l)
+  RATIO_DISK=$(echo "scale=2; ($FREE_DISK / $TOTAL_DISK) * 100" | bc -l)
 
   # Check and send storage warnings
-  if [ $RATIO_DISK -lt $MIN_DISK_RATIO ]; then
+  if [ "$(echo "${RATIO_DISK} < ${MIN_DISK_RATIO}" | bc -l)" -eq 1 ]; then
 
     # Build up the curl arguments
     curl_args=(--silent -o /dev/null -w "%{http_code}")
