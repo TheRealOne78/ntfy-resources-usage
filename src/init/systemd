@@ -3,17 +3,19 @@
 # https://www.gnu.org/licenses/gpl-3.0.en.html
 
 [Unit]
-Name="ntfy-resources-usage"
-Description="Send NTFY alerts to your smart-phone when your unix computer is running out of resources."
-After="network.target"
+Name=ntfy-resources-usage
+Description=Send NTFY alerts to your smart-phone when your unix computer is running out of resources.
+After=network.target
 
 [Service]
-Type="simple"
-ExecStart="/usr/bin/ntfy-resources-usage"
-ExecReload="kill -HUP $MAINPID"
-TimeoutStartSec="0"
-RemainAfterExit="yes"
-Restart="always"
+Type=simple
+ExecStart=/bin/bash /usr/bin/ntfy-resources-usage
+ExecReload=/bin/kill -HUP $MAINPID
+TimeoutStartSec=0
+RemainAfterExit=yes
+Restart=always
+User=root
+Group=root
 
 [Install]
-WantedBy="default.target"
+WantedBy=default.target
