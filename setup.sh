@@ -42,60 +42,109 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 # Install init service
+INIT_SYSTEM_COUNT=0
+
 if [ -x "$(command -v systemctl)" ]; then
   printf "$INFO Systemd detected.\n"
-  SYSTEMD=true
+  INIT_SYSTEM_COUNT=$((INIT_SYSTEM_COUNT + 1))
+  eval "INIT_SYSTEM_${INIT_SYSTEM_COUNT}=Systemd"
 fi
 
 if [ -x "$(command -v openrc-init)" ]; then
   printf "$INFO OpenRC detected.\n"
-  OPENRC=true
+  INIT_SYSTEM_COUNT=$((INIT_SYSTEM_COUNT + 1))
+  eval "INIT_SYSTEM_${INIT_SYSTEM_COUNT}=OpenRC"
+fi
+
+if [ -x "$(command -v dinit)" ]; then
+  printf "$INFO Dinit detected.\n"
+  INIT_SYSTEM_COUNT=$((INIT_SYSTEM_COUNT + 1))
+  ((INIT_SYSTEM_COUNT++))
+  eval "INIT_SYSTEM_${INIT_SYSTEM_COUNT}=Dinit"
+fi
+
+if [ -x "$(command -v runit)" ]; then
+  printf "$INFO Runit detected.\n"
+  INIT_SYSTEM_COUNT=$((INIT_SYSTEM_COUNT + 1))
+  eval "INIT_SYSTEM_${INIT_SYSTEM_COUNT}=Runit"
+fi
+
+if [ -x "$(command -v s6-init)" ]; then
+  printf "$INFO S6 detected.\n"
+  INIT_SYSTEM_COUNT=$((INIT_SYSTEM_COUNT + 1))
+  eval "INIT_SYSTEM_${INIT_SYSTEM_COUNT}=S6"
 fi
 
 install_init() {
-  case $INIT_CHOICE in
-    1)
+  case ${1} in
+    "systemd")
       make install_systemd
       systemctl enable ntfy-resources-usage.service
       ;;
-    2)
+
+    "openrc")
       make install_openrc
       rc-update add ntfy-resources-usage
       ;;
+
+    "dinit")
+      make install_dinit
+      #TODO add dinit enable here
+      ;;
+
+    "runit")
+      make install_runit
+      #TODO add runit enable here
+      ;;
+
+    "s6")
+      make install_s6
+      #TODO add runit enable here
+      ;;
+
     c)
       printf "$INFO Exiting ...\n"
       exit 0
       ;;
+
     *)
       printf "$ERR Wrong choice '$INIT_CHOICE'\n"
       exit 1
       ;;
     esac
+
+  printf "$INFO Installed the \`${1}' init service file. Reboot after setup to start it.\n"
 }
 
-if [ "${SYSTEMD}" = true ] && [ "${OPENRC}" = true ]; then
-  printf "$INFO Both Systemd and OpenRC were detected to the system. Please choose which init service to use: [1-2/c]\n"
-  printf "1) Systemd\n"
-  printf "2) OpenRC\n"
-  printf "c) Cancel\n"
+if [ ${INIT_SYSTEM_COUNT} -gt 1 ]; then
+  printf "$INFO Multiple init systems were detected in the system. Please choose which init service to use: [1-${INIT_SYSTEM_COUNT} / C(ancel)]\n"
+  for INIT_NUM in ; do
+    TMP_INIT_VAR_NAME="INIT_SYSTEM_${INIT_NUM}"
+    printf "${INIT_NUM}) ${!TMP_INIT_VAR_NAME}\n"
+  done
+  printf "C) Cancel\n"
 
   read INIT_CHOICE
-  install_init
+  if [ $(echo "$INIT_CHOICE" | tr '[:upper:]' '[:lower:]') != c ]; then
+    TMP_INIT_VAR_NAME=INIT_SYSTEM_${INIT_NUM}
+    TMP_INIT_VAR_NAME=$(echo "${!TMP_INIT_VAR_NAME}" | tr '[:upper:]' '[:lower:]')
+  else
+    TMP_INIT_VAR_NAME=c
+  fi
 
-elif [ "${SYSTEMD}" = true ]; then
-  INIT_CHOICE=1
-  install_init
-  printf "$INFO Installed Systemd service. Reboot after setup to start it.\n"
-
-elif [ $OPENRC == true ]; then
-  INIT_CHOICE=2
-  install_init
-  printf "$INFO Installed OpenRC service. Reboot after setup to start it.\n"
+elif [ ${INIT_SYSTEM_COUNT} -eq 1 ]; then
+  TMP_INIT_VAR_NAME=$(echo "${INIT_SYSTEM_1}" | tr '[:upper:]' '[:lower:]')
 
 else  # if Systemd or OpenRC couldn't be found in the system
   printf "$ERR Init system couldn't be found!\n"
-  printf "$ERR You have to run 'ntfy-resources-usage' manually from now on.\n"
-  printf "$ERR More info at https://github.com/TheRealOne78/ntfy-resources-usage/wiki\n"
+  printf "$ERR You have to run \`ntfy-resources-usage' manually from now on.\n"
+  printf "$ERR More info at \`https://github.com/TheRealOne78/ntfy-resources-usage/wiki'\n"
+  ERR_NO_INIT=true
+fi
+
+# Actually installing the script
+if [ "${ERR_NO_INIT}" != true ]; then
+   install_init ${TMP_INIT_VAR_NAME}
 fi
 
 printf "$INFO You can now edit the variables in '/etc/ntfy-resources-usage/ntfy-resources-usage.conf'\n"

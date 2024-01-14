@@ -1,0 +1,14 @@
+# Copyright (c) 2024 TheRealOne78
+# Distributed under the terms of the GNU General Public License v3+
+# https://www.gnu.org/licenses/gpl-3.0.en.html
+
+service "ntfy-resources-usage-plugin" {
+    description = "Send NTFY alerts to your smart-phone when your Unix computer is running out of resources."
+    user = "root"
+    group = "root"
+    command = "/usr/bin/ntfy-resources-usage"
+    logfile = "/var/log/ntfy-resources-usage.log"
+    pidfile = "/run/ntfy-resources-usage-plugin.pid"
+    dependencies = ["net", "dns", "logger"]
+    reload_signal = "HUP"
+}
